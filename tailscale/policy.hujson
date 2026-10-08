@@ -1,0 +1,52 @@
+// Tailnet policy for the Linear Algebra Tutor (copy-of-tutor-setup.md §8.1).
+// Source of truth: this file. Paste into Tailscale admin → Access controls → JSON editor.
+// Anything not explicitly accepted below is denied.
+{
+  "tagOwners": {
+    "tag:edge":   ["autogroup:admin"], // Azure edge VM (Traefik + Open WebUI)
+    "tag:llm-gw": ["autogroup:admin"], // CT 100: LiteLLM :4000 (+ vLLM on 127.0.0.1 only)
+    "tag:obs":    ["autogroup:admin"], // CT 130: Prometheus / Loki / Grafana
+  },
+
+  "acls": [
+    // Your own personal devices (laptop, phone) can still reach each other, like before.
+    {"action": "accept", "src": ["autogroup:member"], "dst": ["autogroup:self:*"]},
+
+    // Presentation tier → gateway tier: ONE port.
+    {"action": "accept", "src": ["tag:edge"], "dst": ["tag:llm-gw:4000"]},
+
+    // Observability: obs pulls metrics from edge; edge pushes logs to obs (Loki).
+    {"action": "accept", "src": ["tag:obs"], "dst": ["tag:edge:9100,8082"]},
+    {"action": "accept", "src": ["tag:edge"], "dst": ["tag:obs:3100"]},
+
+    // Admins (you): SSH to the servers, LiteLLM admin/API, Grafana.
+    {"action": "accept", "src": ["autogroup:admin"], "dst": ["tag:edge:22", "tag:llm-gw:22,4000", "tag:obs:22,3000"]},
+  ],
+
+  "ssh": [
+    // Your own devices, as in the default policy.
+    {"action": "check", "src": ["autogroup:member"], "dst": ["autogroup:self"], "users": ["autogroup:nonroot", "root"]},
+    // Servers: re-authenticate in the browser at most every 12 h (JIT-style access).
+    {
+      "action":      "check",
+      "src":         ["autogroup:admin"],
+      "dst":         ["tag:edge", "tag:llm-gw", "tag:obs"],
+      "users":       ["autogroup:nonroot", "root"],
+      "checkPeriod": "12h",
+    },
+  ],
+
+  // Policy tests: Tailscale refuses to save the policy if any of these fail,
+  // so access can't be widened by accident.
+  "tests": [
+    {
+      "src":    "tag:edge",
+      "accept": ["tag:llm-gw:4000", "tag:obs:3100"],
+      "deny":   ["tag:llm-gw:22", "tag:llm-gw:8000", "tag:llm-gw:5432", "tag:obs:3000", "tag:obs:22"],
+    },
+    {
+      "src":  "tag:llm-gw",
+      "deny": ["tag:edge:22", "tag:edge:443", "tag:obs:3000"],
+    },
+  ],
+}
