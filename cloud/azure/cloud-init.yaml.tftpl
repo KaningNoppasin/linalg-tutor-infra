@@ -6,7 +6,9 @@ package_upgrade: true
 packages:
   - ca-certificates
   - curl
+  - dnsutils        # dig
   - jq
+  - netcat-openbsd  # nc, for connectivity tests
   - unattended-upgrades
 
 write_files:
