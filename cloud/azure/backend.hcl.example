@@ -1,0 +1,6 @@
+# Copy to backend.hcl (git-ignored) and fill in the storage account name from step 5.
+resource_group_name  = "rg-tfstate"
+storage_account_name = "sttfstateXXXXX"
+container_name       = "tfstate"
+key                  = "linalg-tutor/azure-edge.tfstate"
+use_azuread_auth     = true # use your `az login` identity, no storage account keys

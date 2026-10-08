@@ -1,0 +1,15 @@
+# OpenTofu working files
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+
+# Local values / secrets (commit the *.example files instead)
+*.tfvars
+!*.tfvars.example
+backend.hcl
+!backend.hcl.example
+
+# Keep .terraform.lock.hcl COMMITTED: it pins provider versions for everyone.

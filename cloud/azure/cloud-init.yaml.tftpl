@@ -1,0 +1,42 @@
+#cloud-config
+# First-boot setup of the edge VM. Rendered by tofu templatefile(): only the
+# key_vault_name, ts_secret_name and ts_hostname placeholders are substituted.
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - jq
+  - unattended-upgrades
+
+write_files:
+  - path: /usr/local/sbin/tailscale-join.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      # Read the Tailscale auth key from Key Vault with the VM's managed identity, then join the tailnet.
+      # Retries for ~10 min: RBAC role assignments and the secret may not exist yet on first boot.
+      set -euo pipefail
+      TS_KEY=""
+      for i in $(seq 1 30); do
+        TOKEN=$(curl -sf -H Metadata:true \
+          "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://vault.azure.net" \
+          | jq -r .access_token) || TOKEN=""
+        if [ -n "$TOKEN" ]; then
+          TS_KEY=$(curl -sf -H "Authorization: Bearer $TOKEN" \
+            "https://${key_vault_name}.vault.azure.net/secrets/${ts_secret_name}?api-version=7.4" \
+            | jq -r .value) || TS_KEY=""
+        fi
+        if [ -n "$TS_KEY" ] && [ "$TS_KEY" != "null" ]; then break; fi
+        echo "waiting for Key Vault secret (attempt $i/30)"; sleep 20
+      done
+      if [ -z "$TS_KEY" ] || [ "$TS_KEY" = "null" ]; then
+        echo "ERROR: could not read the Tailscale key from Key Vault" >&2; exit 1
+      fi
+      tailscale up --auth-key="$TS_KEY" --advertise-tags=tag:edge --ssh --hostname=${ts_hostname}
+
+runcmd:
+  - systemctl enable --now unattended-upgrades
+  - curl -fsSL https://tailscale.com/install.sh | sh
+  - curl -fsSL https://get.docker.com | sh
+  - /usr/local/sbin/tailscale-join.sh
