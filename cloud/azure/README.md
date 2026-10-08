@@ -7,7 +7,7 @@ Creates the cloud half of the Linear Algebra Tutor (see `../../../copy-of-tutor-
 | `main.tf` | Resource group `rg-linalg-tutor` |
 | `network.tf` | VNet `10.100.0.0/16`, subnet `snet-edge`, NSG (443/tcp + 41641/udp only), static public IP, NIC |
 | `keyvault.tf` | Key Vault (RBAC) holding ONE secret: the Tailscale auth key. Roles for you (write) and the VM (read) |
-| `edge.tf` | Debian 12 VM `Standard_B2s`, managed identity, encryption at host, boot diagnostics |
+| `edge.tf` | Debian 12 VM `Standard_B2ls_v2` (2 vCPU / 4 GB), managed identity, encryption at host, boot diagnostics |
 | `cloud-init.yaml.tftpl` | First boot: updates, Docker, Tailscale, joins the tailnet as `tag:edge` |
 | `backup.tf` | Daily Azure Backup, keep 7 (`enable_backup`) |
 | `budget.tf` | Optional monthly budget alert (`enable_budget`) |

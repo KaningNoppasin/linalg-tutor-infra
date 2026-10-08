@@ -27,9 +27,15 @@ variable "edge_subnet_cidr" {
 }
 
 variable "vm_size" {
-  description = "Edge VM size. Standard_B2s = 2 vCPU / 4 GB (x64)."
+  description = "Edge VM size. Standard_B2ls_v2 = 2 vCPU / 4 GB x64 (Standard_B2s v1 is not offered to Azure for Students in southeastasia). Arm64 option: Standard_B2pls_v2 + image_sku 12-arm64."
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_B2ls_v2"
+}
+
+variable "image_sku" {
+  description = "Debian 12 image SKU. 12-gen2 for x64 sizes, 12-arm64 for Arm (Bps*_v2) sizes."
+  type        = string
+  default     = "12-gen2"
 }
 
 variable "admin_username" {

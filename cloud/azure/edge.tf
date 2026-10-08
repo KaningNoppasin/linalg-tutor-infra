@@ -25,7 +25,7 @@ resource "azurerm_linux_virtual_machine" "edge" {
   source_image_reference {
     publisher = "Debian"
     offer     = "debian-12"
-    sku       = "12-gen2"
+    sku       = var.image_sku
     version   = "latest"
   }
 
