@@ -13,3 +13,10 @@ backend.hcl
 !backend.hcl.example
 
 # Keep .terraform.lock.hcl COMMITTED: it pins provider versions for everyone.
+
+# Edge stack runtime files (live only on the VM)
+edge/.env
+edge/secrets/
+edge/authelia/users_database.yml
+edge/authelia/db.sqlite3
+edge/authelia/notification.txt

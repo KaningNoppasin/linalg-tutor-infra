@@ -1,0 +1,121 @@
+# Edge stack on the Azure VM (copy-of-tutor-setup.md §7.4).
+# Internet :443 → Traefik → CrowdSec bouncer → Authelia (OIDC + 2FA) / Open WebUI → tailnet → LiteLLM on CT 100.
+# Image tags are pinned; bump them deliberately (check each project's releases).
+name: edge
+
+services:
+  traefik:
+    image: traefik:v3.5
+    restart: unless-stopped
+    ports:
+      - "443:443" # the ONLY published port (NSG allows 443 + Tailscale UDP)
+    command:
+      # Static config as CLI flags (single source of truth; compose interpolates ${...}).
+      - --entrypoints.websecure.address=:443
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=edge_edge
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true # TLS-ALPN-01 on :443 → no port 80, no DNS token
+      - --accesslog.filepath=/var/log/traefik/access.log # file, so CrowdSec can read it
+      - --accesslog.format=json
+      - --log.level=INFO
+      - --api.dashboard=false
+      - --experimental.plugins.bouncer.modulename=github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+      - --experimental.plugins.bouncer.version=v1.4.2
+    environment:
+      CROWDSEC_BOUNCER_KEY: ${CROWDSEC_BOUNCER_KEY} # read by dynamic.yml template
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - letsencrypt:/letsencrypt
+      - traefik-logs:/var/log/traefik
+    networks:
+      edge:
+        aliases:
+          - auth.${DOMAIN} # Open WebUI reaches Authelia's OIDC endpoints via Traefik inside Docker (no hairpin)
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.6.8
+    restart: unless-stopped
+    environment:
+      COLLECTIONS: "crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/base-http-scenarios"
+      BOUNCER_KEY_traefik: ${CROWDSEC_BOUNCER_KEY} # auto-registers the Traefik plugin as a bouncer
+    volumes:
+      - ./crowdsec/acquis.d:/etc/crowdsec/acquis.d:ro
+      - traefik-logs:/var/log/traefik:ro
+      - crowdsec-db:/var/lib/crowdsec/data
+      - crowdsec-config:/etc/crowdsec
+    networks: [edge]
+
+  authelia:
+    image: authelia/authelia:4.39
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Bangkok
+      DOMAIN: ${DOMAIN}
+      X_AUTHELIA_CONFIG_FILTERS: template
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE: /secrets/jwt_secret
+      AUTHELIA_SESSION_SECRET_FILE: /secrets/session_secret
+      AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: /secrets/storage_key
+      AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE: /secrets/oidc_hmac
+    volumes:
+      - ./authelia:/config
+      - ./secrets:/secrets:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`)
+      - traefik.http.routers.auth.entrypoints=websecure
+      - traefik.http.routers.auth.tls.certresolver=le
+      - traefik.http.routers.auth.middlewares=sec-headers@file,crowdsec@file
+      - traefik.http.services.auth.loadbalancer.server.port=9091
+    networks: [edge]
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.6.18
+    restart: unless-stopped
+    depends_on: [authelia]
+    extra_hosts:
+      - "llm-gw:${LLM_GW_TAILSCALE_IP}" # CT 100 over the tailnet (only :4000 allowed by policy)
+    environment:
+      WEBUI_URL: https://tutor.${DOMAIN}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY}
+      # Backend: LiteLLM on CT 100 with a scoped virtual key
+      ENABLE_OLLAMA_API: "false"
+      OPENAI_API_BASE_URL: http://llm-gw:4000/v1
+      OPENAI_API_KEY: ${OPENWEBUI_LITELLM_KEY}
+      ENABLE_FORWARD_USER_INFO_HEADERS: "true"
+      # Identity: Authelia as OIDC provider; no local password form
+      ENABLE_LOGIN_FORM: "false"
+      ENABLE_OAUTH_SIGNUP: "true"
+      OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "true"
+      OAUTH_PROVIDER_NAME: Authelia
+      OPENID_PROVIDER_URL: https://auth.${DOMAIN}/.well-known/openid-configuration
+      OPENID_REDIRECT_URI: https://tutor.${DOMAIN}/oauth/oidc/callback
+      OAUTH_CLIENT_ID: open-webui
+      OAUTH_CLIENT_SECRET: ${OWUI_OIDC_SECRET}
+      OAUTH_SCOPES: openid email profile groups
+      DEFAULT_USER_ROLE: pending # first user becomes admin; later users wait for approval
+      # Keep the corpus on-prem; no web search from the edge
+      ENABLE_WEB_SEARCH: "false"
+    volumes:
+      - openwebui:/app/backend/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.webui.rule=Host(`tutor.${DOMAIN}`)
+      - traefik.http.routers.webui.entrypoints=websecure
+      - traefik.http.routers.webui.tls.certresolver=le
+      - traefik.http.routers.webui.middlewares=sec-headers@file,ui-ratelimit@file,crowdsec@file
+      - traefik.http.services.webui.loadbalancer.server.port=8080
+    networks: [edge]
+
+networks:
+  edge: {}
+
+volumes:
+  letsencrypt: {}
+  traefik-logs: {}
+  crowdsec-db: {}
+  crowdsec-config: {}
+  openwebui: {}

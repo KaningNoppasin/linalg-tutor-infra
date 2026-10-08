@@ -1,0 +1,30 @@
+# Traefik dynamic config (file provider, Go-templated: env values are read at load time).
+http:
+  middlewares:
+    sec-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: strict-origin-when-cross-origin
+
+    ui-ratelimit: # per source IP; protects the single GPU behind the tunnel
+      rateLimit:
+        average: 20
+        burst: 40
+
+    crowdsec:
+      plugin:
+        bouncer:
+          enabled: true
+          crowdsecMode: stream
+          crowdsecLapiScheme: http
+          crowdsecLapiHost: crowdsec:8080
+          crowdsecLapiKey: '{{ env "CROWDSEC_BOUNCER_KEY" }}'
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      sniStrict: true # no cert for bare-IP scans
