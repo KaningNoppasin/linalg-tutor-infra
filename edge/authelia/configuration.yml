@@ -1,5 +1,6 @@
 # Authelia: login portal + OIDC provider for Open WebUI.
-# Templated (X_AUTHELIA_CONFIG_FILTERS=template): {{ env "DOMAIN" }} and {{ secret "..." }} are resolved at startup.
+# Templated (X_AUTHELIA_CONFIG_FILTERS=template): the env and secret template functions below are resolved
+# at startup. The template engine also runs on comments, so never write template braces in a comment.
 # Other secrets come from *_FILE env vars in docker-compose.yml.
 theme: auto
 
@@ -19,7 +20,10 @@ authentication_backend:
       algorithm: argon2
 
 access_control:
-  default_policy: deny # nothing is reachable via forward-auth unless listed; OIDC clients set their own policy
+  default_policy: deny # anything not matched below is denied
+  rules:
+    - domain: '*.{{ env "DOMAIN" }}' # only our own hosts, always with 2FA
+      policy: two_factor
 
 session:
   cookies:

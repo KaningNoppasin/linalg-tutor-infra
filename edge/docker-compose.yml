@@ -5,7 +5,7 @@ name: edge
 
 services:
   traefik:
-    image: traefik:v3.5
+    image: traefik:v3.6 # >= v3.6 required: older Traefik uses Docker API 1.24, rejected by Docker 29+
     restart: unless-stopped
     ports:
       - "443:443" # the ONLY published port (NSG allows 443 + Tailscale UDP)
