@@ -5,8 +5,9 @@ resource "azurerm_recovery_services_vault" "tutor" {
   resource_group_name = azurerm_resource_group.tutor.name
   sku                 = "Standard"
   storage_mode_type   = "LocallyRedundant"
-  soft_delete_enabled = false # lab: otherwise the vault can't be deleted for 14 days after destroy
-  tags                = local.tags
+  # Soft delete is always on (Azure secure-by-default): deleted backups are kept 14 days,
+  # and the vault can't be deleted until they expire.
+  tags = local.tags
 }
 
 resource "azurerm_backup_policy_vm" "daily" {

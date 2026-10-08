@@ -24,13 +24,14 @@ Creates the cloud half of the Linear Algebra Tutor (see `../../../copy-of-tutor-
 ```bash
 cd infra/cloud/azure
 cp backend.hcl.example backend.hcl                 # fill in storage_account_name
-cp terraform.tfvars.example terraform.tfvars       # fill in subscription_id
+cp terraform.tfvars.example terraform.tfvars       # fill in subscription_id and admin_ip_cidrs
 #    az account show --query id -o tsv
+#    curl -s https://ifconfig.me                   # your home public IP for the Key Vault firewall
 
 tofu init -backend-config=backend.hcl
 tofu fmt -check && tofu validate
 tflint --init && tflint
-checkov -d . --quiet                               # security scan; read the findings
+checkov -d . --quiet --compact                     # expect 0 failed, 4 skipped (reasons are in the code)
 
 # Phase 1: only the Key Vault + your write permission
 tofu plan  -target=azurerm_role_assignment.me_kv_secrets_officer -out=phase1.tfplan
@@ -38,6 +39,7 @@ tofu apply phase1.tfplan
 
 # Put the Tailscale key in the vault (via CLI, so it never enters tofu state).
 # RBAC can take 1–5 min to propagate; retry if you get "Forbidden".
+# "Client address is not authorized" = your home IP changed: update admin_ip_cidrs and apply again.
 KV=$(tofu output -raw key_vault_name)
 read -rs TS_KEY && az keyvault secret set --vault-name "$KV" --name tailscale-authkey --value "$TS_KEY" -o none && unset TS_KEY
 

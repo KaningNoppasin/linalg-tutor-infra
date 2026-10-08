@@ -1,4 +1,5 @@
 resource "azurerm_linux_virtual_machine" "edge" {
+  #checkov:skip=CKV_AZURE_50:Azure Backup needs the VM snapshot extension
   name                            = "vm-${var.prefix}-edge"
   computer_name                   = "edge"
   location                        = azurerm_resource_group.tutor.location

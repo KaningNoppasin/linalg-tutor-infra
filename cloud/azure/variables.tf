@@ -49,8 +49,14 @@ variable "tailscale_secret_name" {
   default     = "tailscale-authkey"
 }
 
+variable "admin_ip_cidrs" {
+  description = "Your public IP(s) allowed through the Key Vault firewall, e.g. [\"203.0.113.7\"] (curl -s https://ifconfig.me). Update it if your home IP changes."
+  type        = list(string)
+  default     = []
+}
+
 variable "enable_backup" {
-  description = "Daily Azure Backup of the edge VM (~US$5–8/mo). The edge is also rebuildable from this code."
+  description = "Daily Azure Backup of the edge VM (~US$5–8/mo). Backup soft delete is always on, so after `tofu destroy` the vault blocks deletion for 14 days. Set false if you destroy/recreate often; the edge is rebuildable from this code."
   type        = bool
   default     = true
 }
